@@ -1,10 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import Papa from 'papaparse';
+import { getTodayTaskProgress, updateTaskProgress, updateTaskStats } from '../lib/supabase';
+import { useAuth } from '../contexts/AuthContext';
 
 export default function DailyTasks() {
   const [tasks, setTasks] = useState<string[]>([]);
   const [checked, setChecked] = useState<boolean[]>([]);
   const [todayLabel, setTodayLabel] = useState<string>('');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const { user } = useAuth();
 
   // 1) Compute "today" as YYYY-MM-DD in CET
   const today = new Intl.DateTimeFormat('en-CA', {
@@ -14,14 +19,18 @@ export default function DailyTasks() {
     day:    '2-digit'
   }).format(new Date());
 
-  // 2) Prefix for per-task keys
-  const keyPrefix = `dailyTasks-${today}-`;
-
-  // 3) Load tasks from CSV, then initialize `checked` from localStorage
+  // 2) Load tasks from CSV and progress from Supabase
   useEffect(() => {
-    fetch('/tasks.csv')
-      .then(r => r.text())
-      .then(csv => {
+    if (!user) return;
+
+    const loadTasks = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+
+        // Load tasks from CSV
+        const response = await fetch('/tasks.csv');
+        const csv = await response.text();
         const { data } = Papa.parse<{date:string;task1:string;task2:string;task3:string;task4:string;task5:string}>(
           csv,
           { header: true, skipEmptyLines: true }
@@ -31,41 +40,60 @@ export default function DailyTasks() {
         setTasks(todayTasks);
         setTodayLabel(`Tasks for ${today}`);
 
-        // build checked[] from localStorage
-        const initial = todayTasks.map((_, idx) =>
-          localStorage.getItem(keyPrefix + idx) === 'true'
+        // Load progress from Supabase
+        const progress = await getTodayTaskProgress(user.id, today);
+        const initialChecked = todayTasks.map((_, idx) => 
+          progress.find(p => p.task_id === `task${idx + 1}`)?.is_checked || false
         );
-        setChecked(initial);
-      })
-      .catch(console.error);
-  }, [today, keyPrefix]);
+        setChecked(initialChecked);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to load tasks');
+        console.error('Error loading tasks:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
 
-  // 4) Toggle handler that also writes to localStorage immediately
-  const toggle = (i: number) => {
-    setChecked(prev => {
-      const nxt = [...prev];
-      nxt[i] = !nxt[i];
-      // persist that one checkbox
-      localStorage.setItem(keyPrefix + i, nxt[i] ? 'true' : 'false');
-      return nxt;
-    });
+    loadTasks();
+  }, [today, user]);
+
+  // 3) Toggle handler with Supabase updates
+  const toggle = async (i: number) => {
+    if (!user) return;
+
+    try {
+      setError(null);
+      const newChecked = [...checked];
+      newChecked[i] = !newChecked[i];
+      setChecked(newChecked);
+
+      // Update Supabase
+      await updateTaskProgress(user.id, `task${i + 1}`, today, newChecked[i]);
+
+      // Check if all tasks are completed
+      const allCompleted = newChecked.every(c => c);
+      if (allCompleted) {
+        await updateTaskStats(user.id, today, true);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update task');
+      console.error('Error updating task:', err);
+      // Revert the checkbox state on error
+      setChecked(prev => {
+        const next = [...prev];
+        next[i] = !next[i];
+        return next;
+      });
+    }
   };
 
-  // 5) Reset at next CET midnight
-  useEffect(() => {
-    const now = new Date();
-    const nextMid = new Date(
-      new Date().toLocaleString('en-US', { timeZone: 'Europe/Berlin' })
-    );
-    nextMid.setHours(24, 0, 0, 0);
-    const ms = nextMid.getTime() - now.getTime();
-    const t = setTimeout(() => {
-      // remove all today's keys
-      checked.forEach((_, i) => localStorage.removeItem(keyPrefix + i));
-      window.location.reload();
-    }, ms);
-    return () => clearTimeout(t);
-  }, [checked.length, keyPrefix]);
+  if (loading) {
+    return <div className="daily-tasks">Loading tasks...</div>;
+  }
+
+  if (error) {
+    return <div className="daily-tasks error">Error: {error}</div>;
+  }
 
   return (
     <section className="daily-tasks">
@@ -78,6 +106,7 @@ export default function DailyTasks() {
                 type="checkbox"
                 checked={checked[i] || false}
                 onChange={() => toggle(i)}
+                disabled={!user}
               />{' '}
               {t}
             </label>
