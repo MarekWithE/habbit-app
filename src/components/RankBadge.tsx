@@ -17,9 +17,9 @@ export default function RankBadge({
 
   // Convert rank to lowercase to match file names
   const normalizedRank = rank.toLowerCase();
-  const src = `/ranks/${normalizedRank}.png`;
+  const src = `https://tskychmsoqkdknxitfaw.supabase.co/storage/v1/object/public/rank-images/${normalizedRank}.png`;
   // Use bronze.png as fallback since default.png doesn't exist
-  const fallback = '/ranks/bronze.png';
+  const fallback = 'https://tskychmsoqkdknxitfaw.supabase.co/storage/v1/object/public/rank-images/bronze.png';
 
   return (
     <div className={`rank-badge rank-badge--${variant}`}>
