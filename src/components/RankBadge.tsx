@@ -15,8 +15,11 @@ export default function RankBadge({
   };
   const { w, h } = sizeMap[variant];
 
-  const src      = `/ranks/${rank}.png`;
-  const fallback = `/ranks/default.png`;
+  // Convert rank to lowercase to match file names
+  const normalizedRank = rank.toLowerCase();
+  const src = `/ranks/${normalizedRank}.png`;
+  // Use bronze.png as fallback since default.png doesn't exist
+  const fallback = '/ranks/bronze.png';
 
   return (
     <div className={`rank-badge rank-badge--${variant}`}>
@@ -25,7 +28,12 @@ export default function RankBadge({
         width={w}
         height={h}
         alt={`${rank} rank icon`}
-        onError={e => { e.currentTarget.src = fallback }}
+        onError={(e) => {
+          const target = e.currentTarget;
+          if (target.src !== fallback) {
+            target.src = fallback;
+          }
+        }}
         style={{ imageRendering: 'pixelated' }}
       />
     </div>
