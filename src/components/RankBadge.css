@@ -1,0 +1,16 @@
+.rank-badge {
+  display: inline-flex;
+  align-items: center;
+}
+
+.rank-badge--small {
+  gap: 2px;
+}
+
+.rank-badge--medium {
+  gap: 3px;
+}
+
+.rank-badge--large {
+  gap: 4px;
+} 

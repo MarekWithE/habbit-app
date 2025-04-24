@@ -1,0 +1,2 @@
+[functions.create-fictional-users]
+verify_jwt = false 
